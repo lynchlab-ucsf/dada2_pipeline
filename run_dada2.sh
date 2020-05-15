@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 #$ -cwd
 #$ -pe smp 18
-#$ -l mem_free=2T
+#$ -l mem_free=1T
 #$ -l h_rt=100:00:00
 #$ -m eab
 #$ -M kathryn.mccauley@ucsf.edu

@@ -33,13 +33,16 @@ pacman::p_load(dada2, parallel, purrr, tictoc, DECIPHER, dplyr, tibble)
 source("DADA2_modfunc.R") # I am modifying some of the DADA2 functions. To see specific details, view the "DADA2_modfunc.R" script and search for "(KM)". I have noted my modifications and my reasoning for the change(s). Keep this in the seq_path directory.
 tic("Completed DADA2 Pipeline") # This function gives you the total runtime of the pipeline until the "toc" function at the very end. New "tic" functions are started within this that have "toc" functions also within. 
 threads <- as.numeric(args[1]) #Number of cores you want to use throughout the process. Modified here to use the number of cores specified in the bash script.
-seq_path <- "." # This says that your sequences (and therefore your CSV file and NextSeq directories) are contained within the working directory.
 #You can also designate a "save path" (so that you can save your final files in a separate place from your sequence files)
 threshold <- 50 # Drop a sample if it contains less than this threshold of reads (shouldn't be lower than 20).
 
 
-#This sequence file can either be made by hand or made using my script titled "Code_for_SampListFile.R", and has three columns: one named "fastqs" that has the location of all sample fastqs, one named "sample.name" with the sample names for each of your sample files, and one named "direction" indicating "forward" or "reverse" (ie, the direction of the read file").
+#This sequence file can either be made by hand or made using my script titled "Code_for_fastq_List.R", and has three columns: one named "fastqs" that has the location of all sample fastqs, one named "sample.name" with the sample names for each of your sample files, and one named "direction" indicating "forward" or "reverse" (ie, the direction of the read file").
 csv_file <- "fastq_file_list_1" # This file name will be used as the downstream output names as well (so that if you, say, run this script on a different cSV file but in the same location, you won't accidentally over-write your work -- not that it's ever happened before...)
+
+## Add directory locations so that DADA2 code can be kept in a clean space that is distinct from all output files
+out_path <- "/wynton/group/lynch/NextSeq_Processed/"
+dada2_path <- "/wynton/group/lynch/kmccauley/dada2_files/"
 
 
 ###################################################
@@ -56,30 +59,18 @@ for(i in 1:length(unique(file_list$run.source))) {
 fnFs[[i]] <- file_list$fastqs[file_list$direction %in% "R1" & file_list$run.source %in% unique(file_list$run.source)[i]]
 fnRs[[i]] <- file_list$fastqs[file_list$direction %in% "R2" & file_list$run.source %in% unique(file_list$run.source)[i]]
 
-filt_path <- file.path(i, "/filt_fastqs") # Place filtered fastqs in filtered/ subdirectory
+filt_path <- file.path(out_path, i, "/filt_fastqs") # Place filtered fastqs in filtered/ subdirectory
 
 filtFs[[i]] <- file.path(filt_path, paste0(file_list$sample.names[file_list$direction %in% "R1" & file_list$run.source %in% unique(file_list$run.source)[i]], "_R1_filt.fastq.gz"))
 filtRs[[i]] <- file.path(filt_path, paste0(file_list$sample.names[file_list$direction %in% "R2" & file_list$run.source %in% unique(file_list$run.source)[i]], "_R2_filt.fastq.gz"))
 }
-
 } else {
-# This part isn't well developed anymore, but it is used if there isn't a .csv file with the run information. Maybe make this part obsolete? Willing to further develop if desired.
-fnFs <- sort(list.files(seq_path, pattern="R1_001.fastq.gz", full.names = TRUE))
-fnRs <- sort(list.files(seq_path, pattern="R2_001.fastq.gz", full.names = TRUE))
-
-#Ensure that your forward and reverse read file paths are correctly 
-print(fnFs)
-print(fnRs)
-
-#I'll use the defaults that we currently employ, given that it's too much work to do this sample-by-sample?
-filt_path <- file.path(getwd(), "filt_fastqs") # Place filtered files in filtered/ subdirectory
-sample.names <- sapply(strsplit(basename(fnFs), "[_]"), function(x) x[1])# My sample names were kinda complicated, so I needed to extract the sample names and create cleaner sample name files for those that get filtered.
-filtFs <- file.path(filt_path, paste0(sample.names, "_fwd_filt.fastq.gz"))
-filtRs <- file.path(filt_path, paste0(sample.names, "_rev_filt.fastq.gz"))
+ print("Cannot find CSV File")
 }
 
+
 for(i in 1:length(fnFs)) {
-save_path <- paste0(unique(file_list$run.source)[i], "/dada2_output_files")
+save_path <- paste0(out_path, unique(file_list$run.source)[i], "/dada2_output")
 print("Save Path:")
 print(save_path)
 
@@ -94,7 +85,7 @@ print(out)
 
 keep <- out[,"reads.out"] > threshold
 
-drop.names <- gsub("_R1.fastq.gz", "", names(keep[!keep]))
+drop.names <- gsub("R1.fastq.gz", "", names(keep[!keep])) ## Removing the underscore to denote the end of the sample name in those that get dropped (for instance if S3 gets dropped, but there's also an S30, it would get dropped previously) This should mitigate that.
 if(length(drop.names)>0) {
 
 filtFs[[i]] <- filtFs[[i]][!grepl(paste(drop.names, collapse="|"), filtFs[[i]])]
@@ -206,16 +197,16 @@ rm(list=c("dadaFs","dadaRs","mergers"))
 #Need to figure out where Silva will end up going. Right now, I have copied it into the directory for this run, but that's not sustainable.
 #Discussion of whether this should be DECIPHER or the usual taxonomy assignment. I will generate both and leave it up to the user.
 print("Running the assignTaxonomy taxonomy Assignment")
-taxa <- assignTaxonomy(seqtab.nochim, "silva_nr_v132_train_set.fa.gz", multithread=threads, tryRC=TRUE, minBoot=80,outputBootstraps=TRUE)
+taxa <- assignTaxonomy(seqtab.nochim, "silva_nr_v138_train_set.fa.gz", multithread=threads, tryRC=TRUE, minBoot=80,outputBootstraps=TRUE)
 write.csv(taxa$boot, paste0(save_path, "/TaxonomyBootstraps.csv"), row.names=F)
-taxa <- addSpecies(taxa$tax, "silva_species_assignment_v132.fa.gz", allowMultiple=TRUE, verbose=TRUE,tryRC=TRUE)
+taxa <- addSpecies(taxa$tax, "silva_species_assignment_v138.fa.gz", allowMultiple=TRUE, verbose=TRUE,tryRC=TRUE)
 taxa.print <- taxa # Removing sequence rownames for display only
 rownames(taxa.print) <- NULL
 table(is.na(taxa.print[,"Genus"]))
 
 print("Running DECIPHER taxonomy assignment method")
 dna <- DNAStringSet(getSequences(seqtab.nochim))
-load("SILVA_SSU_r132_March2018.RData") # this takes awhile
+load("SILVA_SSU_r138_2019.RData") # this takes awhile
 ids <- IdTaxa(dna, trainingSet, strand="both", processors=threads, verbose=TRUE, threshold=60)
 ranks <- c("domain", "phylum", "class", "order", "family", "genus", "species")
 taxid <- t(sapply(ids, function(x) {
@@ -232,10 +223,10 @@ colnames(taxid) <- c(ranks, "confidence")
 # Add back "nice" sample names 
 if(length(sum.out$sampleid) %in% length(sumdadaRs$sampleid))  rownames(seqtab.nochim) <- sumdadaRs$sampleid
 
-write.table(x=getSequences(seqtab.nochim), file=paste0(save_path,"/", csv_file,"_",unique(file_list$run.date)[i],"_seqs.txt"), sep="\t", col.names=F, row.names=F, quote=F)
-write.table(x=t(seqtab.nochim), file=paste0(save_path,"/",csv_file,"_",unique(file_list$run.date)[i],"_otutable.txt"), sep="\t", col.names=T, row.names=T, quote=F)
-write.table(x=taxa.print, file=paste0(save_path,"/",csv_file,"_",unique(file_list$run.date)[i], "_tax_table.txt"), sep="\t", col.names=T, row.names=T, quote=F)
-write.table(x=taxid, file=paste0(save_path, "/", csv_file,"_",unique(file_list$run.date)[i], "_tax_table_DECIPHER.txt"), sep="\t", col.names=T, row.names=T, quote=F)
+write.table(x=getSequences(seqtab.nochim), file=paste0(save_path,"/", csv_file,"_",unique(file_list$run.source)[i],"_seqs.txt"), sep="\t", col.names=F, row.names=F, quote=F)
+write.table(x=t(seqtab.nochim), file=paste0(save_path,"/",csv_file,"_",unique(file_list$run.source)[i],"_otutable.txt"), sep="\t", col.names=T, row.names=T, quote=F)
+write.table(x=taxa.print, file=paste0(save_path,"/",csv_file,"_",unique(file_list$run.source)[i], "_tax_table.txt"), sep="\t", col.names=T, row.names=T, quote=F)
+write.table(x=taxid, file=paste0(save_path, "/", csv_file,"_",unique(file_list$run.source)[i], "_tax_table_DECIPHER.txt"), sep="\t", col.names=T, row.names=T, quote=F)
 }
-save.image("dada2_result_object.RData")
+save.image(paste0(save_path, "/dada2_result_object.RData"))
 toc()
