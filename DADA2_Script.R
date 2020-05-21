@@ -13,7 +13,7 @@ args <- commandArgs(TRUE)
 # This now checks for basic/difficult packages that need to be installed and installs them if not already done.
 if(!"pacman" %in% installed.packages()) install.packages("pacman", repos="https://cran.revolutionanalytics.com/")
 if(!"devtools" %in% installed.packages()) {
-install.packages("devtools")
+install.packages("devtools", repos="https://cran.revolutionanalytics.com/")
 }
 if(!"dada2" %in% installed.packages()) {
 devtools::install_github("benjjneb/dada2", ref="v1.12") # change the ref argument to get other versions
@@ -55,14 +55,16 @@ fnFs <- list()
 fnRs <- list()
 filtFs <- list()
 filtRs <- list()
-for(i in 1:length(unique(file_list$run.source))) {
-fnFs[[i]] <- file_list$fastqs[file_list$direction %in% "R1" & file_list$run.source %in% unique(file_list$run.source)[i]]
-fnRs[[i]] <- file_list$fastqs[file_list$direction %in% "R2" & file_list$run.source %in% unique(file_list$run.source)[i]]
+for(i in unique(file_list$run.source)) {
+save_path <- paste0(out_path, i, "/dada2_output")
+dir.create(save_path, showWarnings=FALSE) ## Create the directory into which all of the output will go -- otherwise get funny-looking output
+fnFs[[i]] <- file_list$fastqs[file_list$direction %in% "R1" & file_list$run.source %in% i]
+fnRs[[i]] <- file_list$fastqs[file_list$direction %in% "R2" & file_list$run.source %in% i]
 
-filt_path <- file.path(out_path, i, "/filt_fastqs") # Place filtered fastqs in filtered/ subdirectory
+filt_path <- file.path(save_path, "filt_fastqs") # Place filtered fastqs in filtered/ subdirectory
 
-filtFs[[i]] <- file.path(filt_path, paste0(file_list$sample.names[file_list$direction %in% "R1" & file_list$run.source %in% unique(file_list$run.source)[i]], "_R1_filt.fastq.gz"))
-filtRs[[i]] <- file.path(filt_path, paste0(file_list$sample.names[file_list$direction %in% "R2" & file_list$run.source %in% unique(file_list$run.source)[i]], "_R2_filt.fastq.gz"))
+filtFs[[i]] <- file.path(filt_path, paste0(file_list$sample.names[file_list$direction %in% "R1" & file_list$run.source %in% i], "_R1_filt.fastq.gz"))
+filtRs[[i]] <- file.path(filt_path, paste0(file_list$sample.names[file_list$direction %in% "R2" & file_list$run.source %in% i], "_R2_filt.fastq.gz"))
 }
 } else {
  print("Cannot find CSV File")
@@ -70,13 +72,13 @@ filtRs[[i]] <- file.path(filt_path, paste0(file_list$sample.names[file_list$dire
 
 
 for(i in 1:length(fnFs)) {
-save_path <- paste0(out_path, unique(file_list$run.source)[i], "/dada2_output")
+save_path <- paste0(out_path, names(fnFs)[i], "/dada2_output")
 print("Save Path:")
 print(save_path)
 
 print("Begin the Filter and Trim Step")
 out <- filterAndTrim2(fwd=unlist(fnFs[[i]]), filt=unlist(filtFs[[i]]), rev=unlist(fnRs[[i]]), filt.rev=unlist(filtRs[[i]]), 
-              maxEE=2, truncQ=0, rm.phix=TRUE, minLen=150,
+              maxEE=2, truncQ=0, rm.phix=TRUE, minLen=150, maxN=10,
               compress=TRUE, multithread=threads, verbose=TRUE, matchIDs = TRUE)
 
 prop.out <- out[,"reads.out"]/out[,"reads.in"]
