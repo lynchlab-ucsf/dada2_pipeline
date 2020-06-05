@@ -6,49 +6,61 @@
 
 # 05/13/19: Add in code at the beginning to install first install pacman (if missing) and then to install other difficult packages without user input.
 # 02/14/20: Modifying to run fully on each run instead of merging several runs. Should, theoretically, output run-specific OTU tables that can then be merged as needed.
+# 05/21/20: Modifying to run after NextSeq Processing script
 
+## NOT VALIDATED!!!
 
 rm(list=ls())
 args <- commandArgs(TRUE)
-# This now checks for basic/difficult packages that need to be installed and installs them if not already done.
-if(!"pacman" %in% installed.packages()) install.packages("pacman", repos="https://cran.revolutionanalytics.com/")
-if(!"devtools" %in% installed.packages()) {
-install.packages("devtools", repos="https://cran.revolutionanalytics.com/")
-}
-if(!"dada2" %in% installed.packages()) {
-devtools::install_github("benjjneb/dada2", ref="v1.12") # change the ref argument to get other versions
-}
-if(!"DECIPHER" %in% installed.packages()) {
-if (!requireNamespace("BiocManager", quietly = TRUE))
-    install.packages("BiocManager")
-BiocManager::install("DECIPHER")
-}
+# This now checks for basic/difficult packages that need to be installed and installs them if not already done, but it isn't working for the most-recent update.
+#if(!"pacman" %in% installed.packages()) install.packages("pacman", repos="https://cran.revolutionanalytics.com/")
+#if(!"devtools" %in% installed.packages()) {
+#install.packages("devtools", repos="https://cran.revolutionanalytics.com/")
+#}
+#if(!"dada2" %in% installed.packages()) {
+#devtools::install_github("benjjneb/dada2", ref="v1.12") # change the ref argument to get other versions
+#}
+#if(!"DECIPHER" %in% installed.packages()) {
+#if (!requireNamespace("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+#BiocManager::install("DECIPHER")
+#}
 
 .libPaths()
 
 pacman::p_load(dada2, parallel, purrr, tictoc, DECIPHER, dplyr, tibble)
 
 .libPaths()
+## Add directory locations so that DADA2 code can be kept in a clean space that is distinct from all output files
+## These directory locations shouldn't need to change, but ar available if needed
+out_path <- "/wynton/group/lynch/NextSeq_Processed/"
+dada2_path <- "/wynton/group/lynch/kmccauley/dada2_files/"
 
-source("DADA2_modfunc.R") # I am modifying some of the DADA2 functions. To see specific details, view the "DADA2_modfunc.R" script and search for "(KM)". I have noted my modifications and my reasoning for the change(s). Keep this in the seq_path directory.
+source(paste0(dada2_path, "DADA2_modfunc.R")) # I am modifying some of the DADA2 functions. To see specific details, view the "DADA2_modfunc.R" script and search for "(KM)". I have noted my modifications and my reasoning for the change(s). Keep this in the seq_path directory.
 tic("Completed DADA2 Pipeline") # This function gives you the total runtime of the pipeline until the "toc" function at the very end. New "tic" functions are started within this that have "toc" functions also within. 
 threads <- as.numeric(args[1]) #Number of cores you want to use throughout the process. Modified here to use the number of cores specified in the bash script.
 #You can also designate a "save path" (so that you can save your final files in a separate place from your sequence files)
 threshold <- 50 # Drop a sample if it contains less than this threshold of reads (shouldn't be lower than 20).
 
-
-#This sequence file can either be made by hand or made using my script titled "Code_for_fastq_List.R", and has three columns: one named "fastqs" that has the location of all sample fastqs, one named "sample.name" with the sample names for each of your sample files, and one named "direction" indicating "forward" or "reverse" (ie, the direction of the read file").
-csv_file <- "fastq_file_list_1" # This file name will be used as the downstream output names as well (so that if you, say, run this script on a different cSV file but in the same location, you won't accidentally over-write your work -- not that it's ever happened before...)
-
-## Add directory locations so that DADA2 code can be kept in a clean space that is distinct from all output files
-out_path <- "/wynton/group/lynch/NextSeq_Processed/"
-dada2_path <- "/wynton/group/lynch/kmccauley/dada2_files/"
+## For the nextseq Processing, I want to be able to run without a CSV file -- basically just pull from whatever forward and reverse files exist in the submission directory
+csv_file <- NULL
 
 
 ###################################################
 #####       START DADA2 CODE            ###########
 ###################################################
 
+ ns_dir <- as.character(args[2])
+ save_path <- paste0(out_path, ns_dir, "/dada2_output")
+print("Save path:")
+save_path
+
+## Developing the ability for a skip pattern to be implemented:
+if(file.exists(paste0(save_path, "/dada2_result_object.RData"))) { ## If this has already been generated, then it gets loaded in.
+   load(paste0(save_path, "/dada2_result_object.RData"))
+}
+
+if(!exists("initial_step")) {
 if(!is.null(csv_file)) {
 file_list <- read.csv(paste0(csv_file, ".csv"),stringsAsFactors=FALSE)
 fnFs <- list()
@@ -65,17 +77,28 @@ filt_path <- file.path(save_path, "filt_fastqs") # Place filtered fastqs in filt
 
 filtFs[[i]] <- file.path(filt_path, paste0(file_list$sample.names[file_list$direction %in% "R1" & file_list$run.source %in% i], "_R1_filt.fastq.gz"))
 filtRs[[i]] <- file.path(filt_path, paste0(file_list$sample.names[file_list$direction %in% "R2" & file_list$run.source %in% i], "_R2_filt.fastq.gz"))
+initial_step <- 1
 }
-} else {
- print("Cannot find CSV File")
+} else { ## Determine what to do without a CSV file
+ fnFs <- list()
+ fnRs <- list()
+ filtFs <- list()
+ filtRs <- list()
+ i <- 1
+ dir.create(save_path, showWarnings=FALSE)
+ fnFs[[i]] <- list.files(paste0(out_path, ns_dir,"/submission/R1"), pattern="fastq", full.names=TRUE)
+ fnRs[[i]] <- list.files(paste0(out_path, ns_dir,"/submission/R2"), pattern="fastq", full.names=TRUE)
+ filt_path <- file.path(save_path, "filtered")
+ sample.names <- gsub("_R1.fastq.gz","",basename(fnFs[[i]]))
+ save.image(paste0(save_path, "/dada2_result_object.RData"))
+filtFs[[i]] <- file.path(filt_path, paste0(sample.names, "_R1_filt.fastq.gz"))
+ filtRs[[i]] <- file.path(filt_path, paste0(sample.names, "_R2_filt.fastq.gz"))
+initial_step <- 1
+}
 }
 
-
-for(i in 1:length(fnFs)) {
-save_path <- paste0(out_path, names(fnFs)[i], "/dada2_output")
-print("Save Path:")
-print(save_path)
-
+i <- 1
+if(!exists("filterTrimComplete")) {
 print("Begin the Filter and Trim Step")
 out <- filterAndTrim2(fwd=unlist(fnFs[[i]]), filt=unlist(filtFs[[i]]), rev=unlist(fnRs[[i]]), filt.rev=unlist(filtRs[[i]]), 
               maxEE=2, truncQ=0, rm.phix=TRUE, minLen=150,
@@ -87,60 +110,83 @@ print(out)
 
 keep <- out[,"reads.out"] > threshold
 
-drop.names <- gsub("R1.fastq.gz", "", names(keep[!keep])) ## Removing the underscore to denote the end of the sample name in those that get dropped (for instance if S3 gets dropped, but there's also an S30, it would get dropped previously) This should mitigate that.
-if(length(drop.names)>0) {
+keep.names <- gsub("R1.fastq.gz", "", names(keep[keep])) ## Removing the underscore to denote the end of the sample name in those that get dropped (for instance if S3 gets dropped, but there's also an S30, it would get dropped previously) This should mitigate that.
+if(length(keep.names)<nrow(out)) {
 
-filtFs[[i]] <- filtFs[[i]][!grepl(paste(drop.names, collapse="|"), filtFs[[i]])]
-filtRs[[i]] <- filtRs[[i]][!grepl(paste(drop.names, collapse="|"), filtRs[[i]])]
+filtFs[[i]] <- filtFs[[i]][grepl(paste(keep.names, collapse="|"), filtFs[[i]])]
+filtRs[[i]] <- filtRs[[i]][grepl(paste(keep.names, collapse="|"), filtRs[[i]])]
 
 print(paste("Samples were dropped due to having fewer than", threshold, "reads per sample:"))
-print(paste(drop.names, collapse=","))
+print(paste(rownames(out)[!keep], collapse=","))
+}
+save.image(paste0(save_path, "/dada2_result_object.RData"))
+filterTrimComplete <- 1
+} else {
+print("Filter and Trim Already Done")
 }
 
 tic("Complete Procesing Up To mergePairs()")
-derepFs <- list()
-derepRs <- list()
-errF <- list()
-errR <- list()
-dadaFs <- list()
-dadaRs <- list()
 
 ## Dereplication
 print("Dereplicate Sequences")
 tic("Dereplication")
+if(!exists("derep_done") | length(derepFs)==0) {
+derepFs <- list()
+derepRs <- list()
 derepFs[[i]] <- derepFastq(filtFs[[i]], verbose=TRUE)
 derepRs[[i]] <- derepFastq(filtRs[[i]], verbose=TRUE)
+derep_done <- 1
+} else { 
+print( "Dereplication already done")
+}
 toc()
 tic("Error-learning")
+if(!exists("error_done") | length(errF)==0) {
+errF <- list()
+errR <- list()
 errF[[i]] <- learnErrors(derepFs[[i]], multithread=threads, randomize=TRUE, nbases=1e8)
 errR[[i]] <- learnErrors(derepRs[[i]], multithread=threads, randomize=TRUE, nbases=1e8)
+error_done <- 1
+} else {
+print("Error Checking Complete")
+}
 toc()
 ## Run DADA2
 tic("DADA2 Step")
+if(!exists("dada_done") | length(dadaFs)==0) {
 print("DADA2 Step")
+dadaFs <- list()
+dadaRs <- list()
 dadaFs[[i]] <- dada(derepFs[[i]], err=errF[[i]], pool=FALSE, multithread=threads)
 dadaRs[[i]] <- dada(derepRs[[i]], err=errR[[i]], pool=FALSE, multithread=threads)
-toc()
+dada_done <- 1
+} else {
+print("DADA denoising already complete")
+}
+
  # This will be the end of the run-specific processing for now.
-toc()
-#save.image(paste0(save_path, "/dada2_result_object_postdada.RData"))
+save.image(paste0(save_path, "/dada2_result_object.RData"))
 
 ## NOW Merge Paired Ends
+if(!exists("merge_reads")) {
 print("Merge Paired Reads")
 library(purrr) #bringing in this package because it "undoes" the list-of-lists that I had, which are no longer needed because I have already taken care of the run-specific processing
 mergers <- mergePairs(flatten(dadaFs), flatten(derepFs), flatten(dadaRs), flatten(derepRs), minOverlap=25, verbose=TRUE)
-
-save.image(paste0(save_path, "/dada2_result_object.RData"))
 
 #I think this is useful information to print, so I will keep it here.
 head(mergers[[1]])
 str(mergers[[1]])
 dim(mergers[[2]])
+merge_reads <- 1
+save.image(paste0(save_path, "/dada2_result_object.RData"))
+
+} else {
+print("Read Merging already Complete")
+}
 
 #Construct Sequence Table
 seqtab <- makeSequenceTable(mergers)
 dim(seqtab)
-sum(seqtab)
 
 #A data check..
 print("Initial Sequence Lengths Pre-Chimera Removal")
@@ -149,16 +195,19 @@ table(nchar(getSequences(seqtab)))
 seq.length <- sort(table(nchar(getSequences(seqtab))))
 ## Remove Chimeras:
 
-seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=threads, verbose=TRUE)
-dim(seqtab.nochim)
+if(!exists("chimera_check")) {
+seqtab.nochim.init <- removeBimeraDenovo(seqtab, method="consensus", multithread=threads, verbose=TRUE)
+dim(seqtab.nochim.init)
 print("Proportion of non-chimeric reads")
-sum(seqtab.nochim)/sum(seqtab)
+sum(seqtab.nochim.init)/sum(seqtab)
+chimera_check <- 1
+} else {print("Chimera Check already complete")}
 
 print("Initial Sequence Lengths")
-table(nchar(getSequences(seqtab.nochim))) # Moving this to *after* the bimera removal, since it's possible that the odd-sized reads are considered bimeras.
-seq.length <- as.numeric(names(which.max(table(nchar(getSequences(seqtab.nochim))))))
+table(nchar(getSequences(seqtab.nochim.init))) # Moving this to *after* the bimera removal, since it's possible that the odd-sized reads are considered bimeras.
+seq.length <- as.numeric(names(which.max(table(nchar(getSequences(seqtab.nochim.init))))))
 seq.ideal <- seq.int(from=seq.length-5, to=seq.length+5)
-seqtab.nochim <- seqtab.nochim[, nchar(getSequences(seqtab.nochim)) %in% seq.ideal]
+seqtab.nochim <- seqtab.nochim.init[, nchar(getSequences(seqtab.nochim.init)) %in% seq.ideal]
 
 print("New Sequence Length Distribution")
 table(nchar(getSequences(seqtab.nochim)))
@@ -192,23 +241,26 @@ track <- sum.out %>%
 	full_join(sum.seqtab)
 
 write.csv(track, paste0(save_path, "/TrackedReadsThruDADA2.csv"))
-rm(list=c("dadaFs","dadaRs","mergers"))
+#rm(list=c("dadaFs","dadaRs","mergers"))
 
 ## Taxonomy
 
 #Need to figure out where Silva will end up going. Right now, I have copied it into the directory for this run, but that's not sustainable.
 #Discussion of whether this should be DECIPHER or the usual taxonomy assignment. I will generate both and leave it up to the user.
+if(!exists("taxa.print")) {
 print("Running the assignTaxonomy taxonomy Assignment")
-taxa <- assignTaxonomy(seqtab.nochim, "silva_nr_v138_train_set.fa.gz", multithread=threads, tryRC=TRUE, minBoot=80,outputBootstraps=TRUE)
+taxa <- assignTaxonomy(seqtab.nochim, paste0(dada2_path, "/silva_nr_v138_train_set.fa.gz"), multithread=threads, tryRC=TRUE, minBoot=80,outputBootstraps=TRUE)
 write.csv(taxa$boot, paste0(save_path, "/TaxonomyBootstraps.csv"), row.names=F)
-taxa <- addSpecies(taxa$tax, "silva_species_assignment_v138.fa.gz", allowMultiple=TRUE, verbose=TRUE,tryRC=TRUE)
+taxa <- addSpecies(taxa$tax, paste0(dada2_path, "/silva_species_assignment_v138.fa.gz"), allowMultiple=TRUE, verbose=TRUE,tryRC=TRUE)
 taxa.print <- taxa # Removing sequence rownames for display only
 rownames(taxa.print) <- NULL
 table(is.na(taxa.print[,"Genus"]))
+} else {print("DADA2 Taxonomy already generated")}
 
+if(!exists("taxid")) {
 print("Running DECIPHER taxonomy assignment method")
 dna <- DNAStringSet(getSequences(seqtab.nochim))
-load("SILVA_SSU_r138_2019.RData") # this takes awhile
+load(paste0(dada2_path, "SILVA_SSU_r138_2019.RData")) # this takes awhile
 ids <- IdTaxa(dna, trainingSet, strand="both", processors=threads, verbose=TRUE, threshold=60)
 ranks <- c("domain", "phylum", "class", "order", "family", "genus", "species")
 taxid <- t(sapply(ids, function(x) {
@@ -220,7 +272,7 @@ taxid <- t(sapply(ids, function(x) {
         c(taxa.d, conf)
 }))
 colnames(taxid) <- c(ranks, "confidence")
-
+} else {print("DECIPHER Taxonomy already generated")}
 
 # Add back "nice" sample names 
 if(length(sum.out$sampleid) %in% length(sumdadaRs$sampleid))  rownames(seqtab.nochim) <- sumdadaRs$sampleid
@@ -229,6 +281,6 @@ write.table(x=getSequences(seqtab.nochim), file=paste0(save_path,"/", csv_file,"
 write.table(x=t(seqtab.nochim), file=paste0(save_path,"/",csv_file,"_",unique(file_list$run.source)[i],"_otutable.txt"), sep="\t", col.names=T, row.names=T, quote=F)
 write.table(x=taxa.print, file=paste0(save_path,"/",csv_file,"_",unique(file_list$run.source)[i], "_tax_table.txt"), sep="\t", col.names=T, row.names=T, quote=F)
 write.table(x=taxid, file=paste0(save_path, "/", csv_file,"_",unique(file_list$run.source)[i], "_tax_table_DECIPHER.txt"), sep="\t", col.names=T, row.names=T, quote=F)
-}
+
 save.image(paste0(save_path, "/dada2_result_object.RData"))
 toc()
