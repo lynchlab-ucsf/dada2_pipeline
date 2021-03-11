@@ -260,28 +260,6 @@ table(is.na(taxa.print[,"Genus"]))
 } else {print("DADA2 Taxonomy already generated")}
 write.table(x=taxa.print, file=paste0(save_path,"/", ns_dir , "_tax_table.txt"), sep="\t", col.names=T, row.names=T, quote=F)
 
-if(!exists("taxid")) {
-print("Running DECIPHER taxonomy assignment method")
-dna <- DNAStringSet(getSequences(seqtab.nochim))
-load(paste0(dada2_path, "SILVA_SSU_r138_2019.RData")) # this takes awhile
-ids <- IdTaxa(dna, trainingSet, strand="both", processors=threads, verbose=TRUE, threshold=60)
-ranks <- c("domain", "phylum", "class", "order", "family", "genus", "species")
-taxid <- t(sapply(ids, function(x) {
-        m <- match(ranks, x$rank)
-        conf <- x$confidence[max(m, na.rm=TRUE)]
-        print(conf)
-        taxa.d <- x$taxon[m] #taxa.d is used because I don't want to over-write the 'taxa' object from above.
-        taxa.d[startsWith(taxa.d, "unclassified_")] <- NA
-        c(taxa.d, conf)
-}))
-colnames(taxid) <- c(ranks, "confidence")
-} else {print("DECIPHER Taxonomy already generated")}
-
-# Add back "nice" sample names 
-if(length(sum.out$sampleid) %in% length(sumdadaRs$sampleid))  rownames(seqtab.nochim) <- sumdadaRs$sampleid
-
-write.table(x=taxid, file=paste0(save_path, "/", ns_dir , "_tax_table_DECIPHER.txt"), sep="\t", col.names=T, row.names=T, quote=F)
-
 save.image(paste0(save_path, "/dada2_result_object.RData"))
 
 ## Handoff to phyloseq:
