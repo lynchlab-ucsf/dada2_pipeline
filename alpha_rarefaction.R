@@ -19,9 +19,9 @@ for(i in 1:nrow(uselevels[,2])) {
   samples.kept[i] <- sum(sample_sums(phy) > depth[i])
 }
 
+print(cbind(depth, samples.kept))
+
 pdf("Alpha_Rarefaction_Curve.pdf",height=8, width=11)
-plt <- rarecurve(t(otu_table(phy)), step=floor(max(sample_sums(phy))/25),cex=0.5)
+plt <- rarecurve(otu_table(phy, taxa_are_rows=TRUE), step=floor(max(sample_sums(phy))/25),cex=0.5)
 abline(v=depth)
 dev.off()
-
-print(cbind(depth, samples.kept))

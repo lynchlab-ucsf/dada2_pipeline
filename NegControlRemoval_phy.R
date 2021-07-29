@@ -1,12 +1,26 @@
-# Code to remove negative controls.
+# Code to remove signal arising from negative controls.
 # Katie McCauley
-# Is it possible to develop this code so that it plays well with the pipeline so far.
-#Maybe use the input CSV to determine which samples belong to each run and do run-specific negative control filtering?
+## Added command line options. 
+writeLines(
+"Code to remove signal arising from negative controls.
+Written by Katie McCauley
+Last Updated: 5/17/21
+
+When run as part of the complete_16s_pipeline, the default options are already chosen for you. If you need to go back and change defaults based on your results, below is the syntax. Unfortunately, it is difficult to apply named arguments in Rscript functions, so this will need to suffice. See example usage below.
+
+## Option 1: Phyloseq object name/location
+## Option 2: Outright remove if sequence is greater than this proportion in negative controls
+## Option 3: Outright remove if sequence is less than this proportion in samples
+## Option 4: To subtract mean or max in negative controls from samples
+
+## Example: Rscript NegControlRemoval_phy.R dada2_phy_obj_raw.rds 0.15 0.15 mean
+")
 
 library(phyloseq)
 library(ggplot2)
 setwd(".")
-phy_filt_tree <- readRDS("dada2_phy_pruned_wtree.rds")
+argv <- commandArgs(TRUE)
+phy_filt_tree <- readRDS(argv[1])
 myNTCs=c("NTC","EMPTY")
 sample_data(phy_filt_tree)$SampleName <- sample_names(phy_filt_tree)
 
@@ -57,9 +71,11 @@ pre.cleaning <- ggplot(dat2, aes(negs,samps)) +
   labs(tag="A")
 #ggsave("Pre_Cleaning_Figure.pdf", pre.cleaning, device="pdf", height=6, width=7)
 
-print("Filtering taxa in greater than 15% of negative controls and less than 15% of samples")
+print(paste0("Filtering taxa in greater than ", argv[2],"% of negative controls and less than ", argv[3],"% of samples."))
+neg.prop <- as.numeric(argv[2])
+samp.prop <- as.numeric(argv[3])
 
-outright.drop <- dat2$`#OTU ID`[dat2$negs > 0.15 & dat2$samps < 0.15]
+outright.drop <- dat2$`#OTU ID`[dat2$negs > neg.prop & dat2$samps < samp.prop]
 
 #ord = outright.drop
 
@@ -69,12 +85,12 @@ all.datA <- subset_taxa(phy_filt_tree, !taxa_names(phy_filt_tree) %in% outright.
 #otu.sub
 neg.dat2 <- subset_taxa(neg.dat, taxa_sums(neg.dat) >0 & !taxa_names(neg.dat) %in% outright.drop)
 
-mean.in.NTC <- ceiling(apply(t(otu_table(neg.dat2)), 1, mean))
+sub.in.NTC <- ceiling(apply(t(otu_table(neg.dat2)), 1, argv[4]))
 
-print("Performing subtraction of the mean of remaining negative control reads from samples")
+print(paste0("Performing subtraction of the ", argv[4]," of remaining negative control reads from samples"))
 otu_sub <- otu_table(all.datA)
-for(i in names(mean.in.NTC)) {
-  otu_sub[, i] <- otu_sub[, i] - mean.in.NTC[i]
+for(i in names(sub.in.NTC)) {
+  otu_sub[, i] <- otu_sub[, i] - sub.in.NTC[i]
   otu_sub[, i][otu_sub[, i] < 0] <- 0
 }
 otu_submean <- all.datA

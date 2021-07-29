@@ -1,8 +1,18 @@
-#! /usr/bin/Rscript
+#!/usr/bin/Rscript
 
 ## Will need to set this up so that it's in the correct directory. Will likely involve a bash script...
+argv <- commandArgs(TRUE)
+
+
 library(phyloseq)
-phy <- readRDS("dada2_phy_obj_raw.rds")
+if(length(argv) == 0) {
+print("Using default phyloseq object name.")
+phyobj <- "dada2_phy_obj_raw.rds"
+} else {
+print("Phyloseq name provided.")
+phyobj <- as.character(argv[[1]])
+}
+phy <- readRDS(phyobj)
 
 #phy_filtB <- subset_taxa(phy, Kingdom %in% "Bacteria") ## Removing after discussion with Sue
 phy_filtP <- prune_taxa(taxa_sums(phy) > 0.000001*sum(taxa_sums(phy)), phy)
@@ -12,9 +22,10 @@ phy_filtP
 library(phangorn)
 library(msa)
 library(DECIPHER)
-
+seqs <- as.character(taxa_names(phy_filtP))
+names(seqs) <- seqs
 print("Running Alignment")
-alignment <- AlignSeqs(DNAStringSet(refseq(phy_filtP)), anchor=NA)
+alignment <- AlignSeqs(DNAStringSet(seqs), anchor=NA)
 print("Running phangorn")
 phang.align <- as.phyDat(as(alignment, "matrix"), type="DNA")
 print("Making distance matrix")
