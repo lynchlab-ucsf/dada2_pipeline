@@ -158,9 +158,7 @@ MYarray=as.data.frame(MYdata)
 repraretable <- reprare(rawtab=MYarray, raredepth=as.numeric(args[2]), ntables=100, distmethod="bray", 
                        summarymeasure=mean, seedstart=123, verbose=TRUE)
 
-repraretable[1:10,1:10]
 rep.array<-as.data.frame(repraretable)
-print(rep.array[1:10,1:10])
 rare.phy <- phy
 otu_table(rare.phy) <- otu_table(rep.array, taxa_are_rows = FALSE)
 rare.phy

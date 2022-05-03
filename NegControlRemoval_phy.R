@@ -67,7 +67,7 @@ pre.cleaning <- ggplot(dat2, aes(negs,samps)) +
   ylab("Proportion of Samples") + 
   xlab("Proportion of Negative Controls") + 
   ggtitle("") + 
-  ggrepel::geom_label_repel(data=subset(dat2, negs > 0.15), aes(label=Genus)) +
+  ggrepel::geom_label_repel(data=subset(dat2, negs > 0.15 & samps < 0.5), aes(label=Genus)) +
   labs(tag="A")
 #ggsave("Pre_Cleaning_Figure.pdf", pre.cleaning, device="pdf", height=6, width=7)
 
@@ -112,7 +112,7 @@ post.clean <- ggplot(dat2, aes(negs,samps)) +
   ylab("Proportion of Samples") + 
   xlab("Proportion of Negative Controls") + 
   ggtitle("") + 
-  ggrepel::geom_label_repel(data=subset(dat2, negs > 0.15), aes(label=Genus)) +
+  ggrepel::geom_label_repel(data=subset(dat2, negs > 0.15 & samps < 0.5), aes(label=Genus)) +
   labs(tag="A")
 
 library(gridExtra)

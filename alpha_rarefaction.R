@@ -6,7 +6,7 @@ args <- commandArgs(TRUE)
 
 phy <- readRDS(as.character(args[1]))
 
-set.max <- as.numeric(args[2])
+set.max <- as.numeric(args[3])
 
 uselevels <- data.frame(read.depth=sample_sums(phy)) %>%
   mutate(groups=factor(ntile(read.depth, 25))) %>% 
@@ -22,6 +22,10 @@ for(i in 1:nrow(uselevels[,2])) {
 print(cbind(depth, samples.kept))
 
 pdf("Alpha_Rarefaction_Curve.pdf",height=8, width=11)
-plt <- rarecurve(otu_table(phy, taxa_are_rows=TRUE), step=floor(max(sample_sums(phy))/25),cex=0.5)
+if(args[2] == "transpose") {
+ plt <- rarecurve(t(otu_table(phy)), step=floor(max(sample_sums(phy))/25),cex=0.5)
+} else {
+  plt <- rarecurve(otu_table(phy), step=floor(max(sample_sums(phy))/25),cex=0.5)
+}
 abline(v=depth)
 dev.off()
