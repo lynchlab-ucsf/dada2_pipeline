@@ -11,19 +11,6 @@
 
 rm(list=ls())
 args <- commandArgs(TRUE)
-# This now checks for basic/difficult packages that need to be installed and installs them if not already done, but it isn't working for the most-recent update.
-#if(!"pacman" %in% installed.packages()) install.packages("pacman", repos="https://cran.revolutionanalytics.com/")
-#if(!"devtools" %in% installed.packages()) {
-#install.packages("devtools", repos="https://cran.revolutionanalytics.com/")
-#}
-#if(!"dada2" %in% installed.packages()) {
-#devtools::install_github("benjjneb/dada2", ref="v1.12") # change the ref argument to get other versions
-#}
-#if(!"DECIPHER" %in% installed.packages()) {
-#if (!requireNamespace("BiocManager", quietly = TRUE))
-#    install.packages("BiocManager")
-#BiocManager::install("DECIPHER")
-#}
 
 .libPaths()
 
@@ -35,13 +22,8 @@ pacman::p_load(dada2, parallel, purrr, DECIPHER, dplyr, tibble, phyloseq)
 out_path <- "/wynton/group/lynch/NextSeq_Processed/"
 dada2_path <- "/wynton/group/lynch/kmccauley/dada2_files/"
 
-#source(paste0(dada2_path, "DADA2_modfunc.R")) # I am modifying some of the DADA2 functions. To see specific details, view the "DADA2_modfunc.R" script and search for "(KM)". I have noted my modifications and my reasoning for the change(s). Keep this in the seq_path directory.
 threads <- as.numeric(args[1]) #Number of cores you want to use throughout the process. Modified here to use the number of cores specified in the bash script.
-#You can also designate a "save path" (so that you can save your final files in a separate place from your sequence files)
 threshold <- 50 # Drop a sample if it contains less than this threshold of reads (shouldn't be lower than 20).
-
-## For the nextseq Processing, I want to be able to run without a CSV file -- basically just pull from whatever forward and reverse files exist in the submission directory
-csv_file <- NULL
 
 mapping_file <- as.character(args[3])
 
@@ -63,25 +45,6 @@ if(file.exists(paste0(save_path, "/dada2_result_object.RData"))) { ## If this ha
 }
 
 if(!exists("initial_step")) {
-if(!is.null(csv_file)) {
-file_list <- read.csv(paste0(csv_file, ".csv"),stringsAsFactors=FALSE)
-fnFs <- list()
-fnRs <- list()
-filtFs <- list()
-filtRs <- list()
-for(i in unique(file_list$run.source)) {
-save_path <- paste0(out_path, i, "/dada2_output")
-dir.create(save_path, showWarnings=FALSE) ## Create the directory into which all of the output will go -- otherwise get funny-looking output
-fnFs[[i]] <- file_list$fastqs[file_list$direction %in% "R1" & file_list$run.source %in% i]
-fnRs[[i]] <- file_list$fastqs[file_list$direction %in% "R2" & file_list$run.source %in% i]
-
-filt_path <- file.path(save_path, "filt_fastqs") # Place filtered fastqs in filtered/ subdirectory
-
-filtFs[[i]] <- file.path(filt_path, paste0(file_list$sample.names[file_list$direction %in% "R1" & file_list$run.source %in% i], "_R1_filt.fastq.gz"))
-filtRs[[i]] <- file.path(filt_path, paste0(file_list$sample.names[file_list$direction %in% "R2" & file_list$run.source %in% i], "_R2_filt.fastq.gz"))
-initial_step <- 1
-}
-} else { ## Determine what to do without a CSV file
  fnFs <- list()
  fnRs <- list()
  filtFs <- list()
@@ -95,7 +58,6 @@ initial_step <- 1
  filtFs[[i]] <- file.path(filt_path, paste0(sample.names, "_R1_filt.fastq.gz"))
  filtRs[[i]] <- file.path(filt_path, paste0(sample.names, "_R2_filt.fastq.gz"))
 initial_step <- 1
-}
 }
 
 i <- 1
@@ -129,17 +91,6 @@ print("Filter and Trim Already Done")
 }
 
 
-## Dereplication
-#print("Dereplicate Sequences")
-#if(!exists("derep_done")) {
-#derepFs <- list()
-#derepRs <- list()
-#derepFs[[i]] <- derepFastq(filtFs[[i]], verbose=TRUE)
-#derepRs[[i]] <- derepFastq(filtRs[[i]], verbose=TRUE)
-#derep_done <- 1
-#} else { 
-#print( "Dereplication already done")
-#}
 save.image(paste0(save_path, "/dada2_result_object.RData"))
 if(!exists("error_done")) {
 errF <- list()
@@ -247,8 +198,6 @@ write.csv(track, paste0(save_path, "/TrackedReadsThruDADA2.csv"))
 
 ## Taxonomy
 
-#Need to figure out where Silva will end up going. Right now, I have copied it into the directory for this run, but that's not sustainable.
-#Discussion of whether this should be DECIPHER or the usual taxonomy assignment. I will generate both and leave it up to the user.
 if(!exists("taxa.print")) {
 print("Running the assignTaxonomy taxonomy Assignment")
 taxa <- assignTaxonomy(seqtab.nochim, paste0(dada2_path, "/silva_nr_v138_train_set.fa.gz"), multithread=threads, tryRC=TRUE, minBoot=80,outputBootstraps=TRUE)
